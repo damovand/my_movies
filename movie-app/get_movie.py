@@ -1,0 +1,94 @@
+from flask import jsonify
+from omdbapi.movie_search import GetMovie
+from pprint import pprint
+import requests
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+# Function to test OMDb API response
+def omdb_movie_details(api_key, movie_title, movie_year):
+    """
+    Calls the OMDb API for a given movie title and validates the returned data.
+    """
+    base_url = "http://www.omdbapi.com/"
+    params = {
+        "t": movie_title,  # Search by title
+        "apikey": api_key,
+        "y": movie_year
+    }
+    print(f"Calling OMDb API(apikey: {api_key}) for Title: {movie_title}, Year: {movie_year}")
+    try:
+        # Make the API request
+        response = requests.get(base_url, params=params, timeout=5)
+
+        # Check HTTP status
+        if response.status_code != 200:
+            print(f"❌ HTTP Error: {response.status_code}")
+            return response.json()
+
+        # Parse JSON
+        data = response.json()
+
+        # Check if API returned an error
+        if data.get("Response") == "False":
+            print(f"❌ API Error: {data.get('Error')}")
+            return response.json()
+        # Validate expected fields
+        expected_fields = ["Title", "Year", "Genre", "Director", "Actors", "imdbRating"]
+        missing_fields = [field for field in expected_fields if field not in data]
+
+        if missing_fields:
+            print(f"❌ Missing fields in response: {missing_fields}")
+            return response.json()
+        # Print validated data
+        print(f"✅ API call successful and data validated for {movie_title}:  And Year {movie_year}")
+        #for field in expected_fields:
+        #    print(f"{field}: {data[field]}")
+
+        return data
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Request failed: {e}")
+        return jsonify({"error": str(e)})
+
+def bulk_update_movie(movie_df):
+
+    #for idx, row in movie_df[movie_df['Genre'].isna()].iterrows():
+    for idx, row in movie_df.iterrows():
+        movie_title = movie_df.at[idx, 'Title']
+        movie_year = movie_df.at[idx,'Released_Year']
+        print (" ===== Look For: ",idx, " Title  ",movie_title, " AND Year  <",movie_year, " >End Row ===")
+        
+        new_value = omdb_movie_details(OMDB_API_KEY, movie_title, movie_year)
+            
+        if isinstance(new_value, dict):
+            try:
+                movie_df.at[idx, 'Released_Year']  = new_value["Year"]
+                movie_df.at[idx, 'Overview'] = new_value["Plot"]
+                movie_df.at[idx, 'Star1']  = new_value["Actors"]
+                movie_df.at[idx, 'Director']  = new_value["Director"]
+                movie_df.at[idx, 'Genre']  = new_value["Genre"]
+                movie_df.at[idx, 'Poster_Link']  = new_value["Poster"]
+                movie_df.at[idx, 'IMDB_Rating']  = new_value["imdbRating"]
+            except KeyError as e:
+                print(f"❌ Missing key in response: {e} movie_title: {movie_title}, movie_year: {movie_year}    ")
+            
+        elif isinstance(new_value, list):
+            print (" Data Returned  is list")
+    if new_value:
+        movie_df.to_csv('data/my_Movies_Details_Completed.csv', encoding='utf-8', index=False)
+    return new_value
+
+
+if __name__ == "__main__":
+    # Replace with your OMDb API key
+    API_KEY = api_key
+    MOVIE_TITLE = "Exorcist"
+    MOVIE_YEAR = "1973"
+    #MOVIE_TITLE = "A Haunting in Venice"
+    #MOVIE_TITLE = "A.I. Artificial Intelligence"
+    # Run the test
+    omdb_movie_details(API_KEY, MOVIE_TITLE, MOVIE_YEAR)
+
