@@ -1,0 +1,58 @@
+services:
+  movie-db:
+    # We use a mariadb image which supports both amd64 & arm64 architecture
+    image: mariadb:latest
+    command: '--default-authentication-plugin=mysql_native_password'
+    restart: always
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 --password="$$(cat /run/secrets/db-password)" --silent']
+      interval: 3s
+      retries: 5
+      start_period: 30s
+    secrets:
+      - db-password
+    volumes:
+      - movie-data:/var/lib/mysql
+    networks:
+      - backnet1
+    environment:
+      - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/db-password
+      - MARIADB_DATABASE=movies
+      - MARIADB_USER=user
+      - MARIADB_PASSWORD=user_pass
+
+    ports:
+      - 3308:3306
+  movie-app:
+    build:
+      context: movie-app
+      target: builder
+    restart: always
+    secrets:
+      - db-password
+    ports:
+      - 8001:8001
+    networks:
+      - backnet1
+      - frontnet1
+
+  web-proxy:
+    build: web-proxy
+    restart: always
+    ports:
+      - 8088:8088
+    depends_on:
+      - movie-app
+    networks:
+      - frontnet1
+
+volumes:
+  movie-data:
+
+secrets:
+  db-password:
+    file: movie-db/password.txt
+
+networks:
+  backnet1:
+  frontnet1:
